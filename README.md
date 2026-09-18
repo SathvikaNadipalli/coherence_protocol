@@ -7,15 +7,10 @@ scenarios: `python3 sample_requests.py`. Optional HTTP server: `python3
 -m policy_gate.http_app` (POST JSON to `/evaluate`).
 
 ## 1. Assumptions
-
-`account_balance` has no freshness rule, so once present it's
-authoritative — only `vendor_status` has an explicit 30-minute staleness
-rule. "Another authority" (rule 2) is a per-action-type threshold
-(`transfer_funds` at $50,000). `evaluated_at` must parse as ISO-8601;
-without it, no staleness math is possible, so the request DEFERs. A
-negative vendor-evidence age (checked-at in the future) is also
-untrustworthy and DEFERs. The policy is a fixed allow-list keyed by
-action type; anything absent is unauthorized by default (rule 6).
+We assumed that account balance is fresh and up to date, so there was 
+no time limit added to it unlike the `vendor_status`. I also assumed
+that if REFER was only suposed to be down when all other conditions were
+met so that the refered party can assume everything else checks out.
 
 ## 2. DEFER vs REFER
 
@@ -23,21 +18,20 @@ DEFER: not enough information to legitimately reach ADMIT or HALT —
 missing/stale evidence, or a malformed request. It's about evidence
 quality. REFER: everything checks out, but the decision is still out of
 this service's jurisdiction — the $50,000 threshold routes elsewhere.
-DEFER is "ask again with better evidence"; REFER is "ask someone else."
+DEFER is "ask again with better evidence" while REFER is "ask someone else."
 
 ## 3. Rule precedence
 
-A fixed ladder (full rationale in `evaluator.py`), evaluated as 1, 2, 3,
-5, 6, 4, 7: structural validity → action covered by policy (rule 6) →
-actor authorized (rule 1) → balance (rule 5) → vendor freshness/approval
-(rules 3 & 4) → authority threshold (rule 2, REFER) → ADMIT. Scope (2, 3)
-precedes everything, since an unknown/unauthorized action shouldn't be
-evaluated further. Evidence quality (5, 6) precedes jurisdiction (4): a
-request only reaches REFER once evidence is already clean, so REFER now
-means "evidence checks out, but the amount is still someone else's call,"
-not "route regardless of evidence." Within the evidence tier, a HALT
-fully supported by non-stale evidence pre-empts a DEFER from unrelated
-stale evidence.
+The rules are as follows:
+Step 1: We check if the request has complete information, if not we DEFER 
+Step 2: We check that the action types are covered by the policy, else HALT
+Step 3: We check that the finance_agent is doing tranfer_funds, else HALT
+Step 4: Make sure sufficient funds, else HALT
+Step 5: Check vendor, if not approved HALT, or if not fresh DEFER
+Step 6: If amount over $50,000 REFER
+Step 7: If none of the above steps get fired, ADMIT
+
+
 
 ## 4. What makes two evaluations "the same"
 
